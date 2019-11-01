@@ -58,6 +58,7 @@ def warn_about_logger():
     )
 
 
+from cdispyutils.profiling import Profiler
 def app_init(
     app,
     settings="fence.settings",
@@ -77,6 +78,8 @@ def app_init(
     app_sessions(app)
     app_register_blueprints(app)
     server.init_app(app, query_client=query_client)
+    profiler = Profiler(enable=True, output_style="detailed")
+    profiler.profile_app(app)
 
 
 def app_sessions(app):
