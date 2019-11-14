@@ -6,7 +6,7 @@ FROM quay.io/cdis/python-nginx:pybase3-1.0.0
 ENV appname=fence
 
 ENV UWSGI_CHEAPER=
-ENV UWSGI_PROCESSES=1
+ENV UWSGI_PROCESSES=2
 
 RUN apk update \
     && apk add postgresql-libs postgresql-dev libffi-dev libressl-dev \
