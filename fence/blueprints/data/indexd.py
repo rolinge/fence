@@ -963,7 +963,7 @@ def _get_user_info():
     populated information about an anonymous user.
     """
     try:
-        set_current_token(validate_request(aud="user"))
+        set_current_token(validate_request(scope={"user"}))
         user_id = str(current_token["sub"])
         username = current_token["context"]["user"]["name"]
     except JWTError:
