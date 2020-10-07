@@ -3,7 +3,7 @@
 
 FROM quay.io/cdis/python-nginx:pybase3-1.4.0
 
-ENV appname=fence
+ENV appname=fencetest
 
 RUN apk update \
     && apk add postgresql-libs postgresql-dev libffi-dev libressl-dev \
