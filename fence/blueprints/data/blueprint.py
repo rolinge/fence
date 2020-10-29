@@ -1,4 +1,7 @@
 import flask
+import os
+from flask import  request
+from azure.storage.blob.blockblobservice import BlockBlobService
 
 from cdislogging import get_logger
 
@@ -120,6 +123,9 @@ def upload_data_file():
     """
     # make new record in indexd, with just the `uploader` field (and a GUID)
     params = flask.request.get_json()
+    #KJ10132020
+
+    print("KJ blueprint: value for params from flask request json: {}".format(params))
     if not params:
         raise UserError("wrong Content-Type; expected application/json")
 
@@ -162,6 +168,43 @@ def upload_data_file():
             "on the authz resources you specified (if you specified any)."
         )
 
+    #KJ10152020
+    #blob_service_client = BlockBlobService(
+    #        account_name = 'msazblobstorage',
+    #       account_key = 'a79oz8UNy1ehdaYuFQ3j7qSNeNPmf1T7o7UD6X4snMaic1jujPsRTkWj/Jyjdn0e38tVzx6e/cdXtFILLjNYRg==')
+
+    #print ('Value of blob service client {}'.format(blob_service_client))
+
+    #print ('Value of BlockBlobService {}'.format(BlockBlobService))
+    #container_name = 'images'
+    #print("\nList blobs in the container")
+    #generator = blob_service_client.list_blobs(container_name)
+    #for blob in generator:
+    #    print("\t Blob name: " + blob.name)
+
+    #local_file_name = 'requirements.txt'
+    #local_path = os.path.expanduser("./opt/fence")
+    #full_path_to_file = os.path.join(local_path, local_file_name)
+    #print("path of file {}".format( full_path_to_file ))
+
+    #blob_service_client.create_blob_from_path(
+    #        container_name, local_file_name, full_path_to_file)
+
+    #file_name = params["file_name"]
+
+    #file = request.files
+    #print(file)
+    #blob_service_client.create_blob_from_path(
+    #        container_name, file_name, file.read())
+   
+#    file = request.files['gen3-client']
+#    print("file name is {}".format(file))
+
+   # Create a file in local data directory to upload and download
+  
+
+    #KJ10152020
+
     blank_index = BlankIndex(
         file_name=params["file_name"], authz=params.get("authz"), uploader=uploader
     )
@@ -176,6 +219,11 @@ def upload_data_file():
         "url": blank_index.make_signed_url(params["file_name"], expires_in=expires_in),
     }
 
+    # KJ10132020
+
+    print("KJ blueprint: Flask jsonify response : {}".format(response))
+
+    #print("KJ blueprint: URL value : {}".format(url))
     return flask.jsonify(response), 201
 
 

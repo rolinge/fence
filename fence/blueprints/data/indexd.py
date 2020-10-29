@@ -159,6 +159,11 @@ class BlankIndex(object):
         self.logger.info(
             "created blank index record with GUID {} for upload".format(guid)
         )
+        # KJ10122020
+
+        print("KJ value for document :{}".format(document))
+
+        print('did value is {}'.format(document['did']))
         return document
 
     def make_signed_url(self, file_name, expires_in=None):
@@ -175,17 +180,35 @@ class BlankIndex(object):
         """
         try:
             bucket = flask.current_app.config["DATA_UPLOAD_BUCKET"]
+            #bucket = flask.current_app.config["gen3blobstorage"]
         except KeyError:
             raise InternalError(
                 "fence not configured with data upload bucket; can't create signed URL"
             )
         s3_url = "s3://{}/{}/{}".format(bucket, self.guid, file_name)
+        #s3_url = "{}".format(bucket.aws_secret_accesss_key)
+        
         url = S3IndexedFileLocation(s3_url).get_signed_url("upload", expires_in)
+        if bucket == "gen3blobstorage":
+        #if flask.current_app.config["DATA_UPLOAD_BUCKET"] =  "gen3blobstorage":
+            url1=  url[8:23]
+            url_split = url.split("=")
+            url_split1 = url_split[2].split("%")
+            url_split2 = url_split1[0] + "=="
+            url = url1 + ";" + url_split2
+
+        #KJ10132020
+
+        #print("KJ S3 URL value is {}".format(s3_url))
+        print("KJ URL value is {}".format(url))
         self.logger.info(
-            "created presigned URL to upload file {} with ID {}".format(
+            "created presigned URL to upload file {} with ID {}. SUCCESS!".format(
                 file_name, self.guid
             )
         )
+        # KJ10122020
+
+        print("KJ value for bucket : {}".format( bucket))
         return url
 
     @staticmethod
@@ -206,6 +229,9 @@ class BlankIndex(object):
                 "fence not configured with data upload bucket; can't create signed URL"
             )
         s3_url = "s3://{}/{}".format(bucket, key)
+        #KJ10122020
+
+        print('KJ Flow is coming to multipart upload')
         return S3IndexedFileLocation(s3_url).init_multipart_upload(expires_in)
 
     @staticmethod
@@ -530,6 +556,9 @@ class IndexedFileLocation(object):
             raise NotSupported(
                 "The specified protocol {} is not supported".format(protocol)
             )
+        #KJ10132020
+
+        print("KJ protocol value :".format(protocol))
         if protocol == "s3":
             return S3IndexedFileLocation(url)
         elif protocol == "gs":
