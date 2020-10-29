@@ -7,7 +7,7 @@
 
 
 A `fence` separates protected resources from the outside world and allows
-only trusted entities to enter. this is a test change.
+only trusted entities to enter.
 
 Fence is a core service of the Gen3 stack that has multiple capabilities:
 1. Act as an [auth broker](#auth-broker) to integrate with one or more [IdPs](#IdP) and provide downstream authentication and authorization for Gen3 services.
