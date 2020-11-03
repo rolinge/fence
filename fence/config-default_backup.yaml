@@ -511,7 +511,7 @@ STORAGE_CREDENTIALS: {}
 #    is_mocked: true
 
 # //////////////////////////////////////////////////////////////////////////////////////
-# AWS and AZURE BUCKETS AND CREDENTIALS
+# AWS BUCKETS AND CREDENTIALS
 #   - Support `/data` endpoints
 # //////////////////////////////////////////////////////////////////////////////////////
 AWS_CREDENTIALS: {}
@@ -542,29 +542,10 @@ S3_BUCKETS: {}
 #     cred: 'CRED1'
 #     region: 'us-east-1'
 #     role-arn: 'arn:aws:iam::role1'
-#
-# `DATA_UPLOAD_BUCKET` specifies an S3 bucket or Azure Container to which data files are uploaded,
+
+# `DATA_UPLOAD_BUCKET` specifies an S3 bucket to which data files are uploaded,
 # using the `/data/upload` endpoint. This must be one of the first keys under
-# `S3_BUCKETS` or 'AZ_CONTAINERS' (since these are the buckets fence has credentials for).
-# 'TARGET_CLOUD_STORAGE' specifies the destination Cloud storage like S3 or Azure.
-# Pre-defined values for 'TARGET_CLOUD_STORAGE'can be 's3'/'az'.
-AZ_CREDENTIALS: {}
-# Note: Remove the {} and supply creds if needed.  See example below...
-#  'CREDA':
-#    az_stgacctname: ''   #use storeage account name from Azure
-#    az_secret_access_key: ''   #use secret key from azure
-#  'CREDB':
-#    az_stgacctname:  ''
-#    az_secret_access_key: ''
-#
-AZ_CONTAINERS: {}
-# NOTE: Remove the {} and supply Containers. Example in comments below
-#   container1:
-#     cred: 'CREDA'
-#   container2:
-#     cred: 'CREDB'      
-#
-TARGET_UPLOAD_STORAGE: 's3'  #use pre-defined values such as 's3'/'az'
+# `S3_BUCKETS` (since these are the buckets fence has credentials for).
 DATA_UPLOAD_BUCKET: 'bucket1'
 
 # //////////////////////////////////////////////////////////////////////////////////////

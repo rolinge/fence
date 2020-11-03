@@ -187,26 +187,20 @@ class BlankIndex(object):
                 "fence not configured with data upload bucket; can't create signed URL"
             )
         s3_url = "s3://{}/{}/{}".format(bucket, self.guid, file_name)
-        flag = flask.current_app.config["TARGET_UPLOAD_STORAGE"]
-        print("KJ flag value is {}".format(flag))
         #s3_url = "{}".format(bucket.aws_secret_accesss_key)
-        if flag == "s3":
-                    
-            url = S3IndexedFileLocation(s3_url).get_signed_url("upload", expires_in)
-       # if bucket == "gen3blobstorage":
-        elif flag == "az":
-            url = AzIndexedFileLocation(s3_url).get_signed_url("upload", expires_in)
-            az_stgacctname = url['az_stgacctname'] 
-            az_secret_access_key = url['az_secret_access_key']
-           # url1=  url[8:23]
-           # url_split = url.split("=")
-           # url_split1 = url_split[2].split("%")
-           # url_split2 = url_split1[0] + "=="
-            url = az_stgacctname + ";" + az_secret_access_key 
+        
+        url = S3IndexedFileLocation(s3_url).get_signed_url("upload", expires_in)
+        if bucket == "gen3blobstorage":
+        #if flask.current_app.config["DATA_UPLOAD_BUCKET"] =  "gen3blobstorage":
+            url1=  url[8:23]
+            url_split = url.split("=")
+            url_split1 = url_split[2].split("%")
+            url_split2 = url_split1[0] + "=="
+            url = url1 + ";" + url_split2
 
         #KJ10132020
 
-        #print("KJ S3 URL value is {}".format(s3_url))
+        print("KJ S3 URL value is {}".format(s3_url))
         print("KJ URL value is {}".format(url))
         self.logger.info(
             "created presigned URL to upload file {} with ID {}. SUCCESS!".format(
@@ -701,20 +695,15 @@ class S3IndexedFileLocation(IndexedFileLocation):
     def get_signed_url(
         self, action, expires_in, public_data=False, force_signed_url=True, **kwargs
     ):
-        print("kj loop is coming to aws get_signed_url")
         aws_creds = get_value(
             config, "AWS_CREDENTIALS", InternalError("credentials not configured")
         )
         s3_buckets = get_value(
             config, "S3_BUCKETS", InternalError("buckets not configured")
         )
-        print(" value of aws config".format(config))
-        print(" value of aws_creds {}".format(aws_creds))
-        print(" value of aws_containers {}".format(s3_buckets))
+
         bucket_name = self.bucket_name()
         bucket = s3_buckets.get(bucket_name)
-        print(" value of aws bucket name {}".format(bucket_name))
-        print(" value of aws bucket {}".format(bucket))
 
         if bucket and bucket.get("endpoint_url"):
             http_url = bucket["endpoint_url"].strip("/") + "/{}/{}".format(
@@ -851,268 +840,6 @@ class S3IndexedFileLocation(IndexedFileLocation):
             return ("Failed to delete data file.", 500)
 
 
-
-class AzIndexedFileLocation(IndexedFileLocation):
-
-    """
-    An indexed file that lives in an Azure container.
-    """
-    @classmethod
-    def assume_role(cls, bucket_cred, expires_in, az_creds_config, boto=None):
-        """
-        Args:
-            bucket_cred
-            expires_in
-            aws_creds_config
-            boto (optional): provide `boto` when calling this function
-                outside of application context, to avoid errors when
-                using `flask.current_app`.
-        """
-
-        boto = boto or flask.current_app.boto
-        role_arn = get_value(
-            bucket_cred, "role-arn", InternalError("role-arn of that bucket is missing")
-        )
-        assumed_role = boto.assume_role(role_arn, expires_in, aws_creds_config)
-        cred = get_value(
-            assumed_role, "Credentials", InternalError("fail to assume role")
-        )
-        return {
-            "az_stgacctname": get_value(
-                cred,
-                "AccessKeyId",
-                InternalError("outdated format. AccessKeyId missing"),
-            ),
-            "az_secret_access_key": get_value(
-                cred,
-                "SecretAccessKey",
-                InternalError("outdated format. SecretAccessKey missing"),
-            ),
-            "az_session_token": get_value(
-                cred,
-                "SessionToken",
-                InternalError("outdated format. Sesssion token missing"),
-            ),
-        }
-
-
-    def bucket_name(self):
-        """
-        Return:
-            Optional[str]: bucket name or None if not not in cofig
-        """
-        az_container = get_value(
-            flask.current_app.config,
-            "AZ_CONTAINERS",
-            InternalError("buckets not configured"),
-        )
-        for bucket in az_container:
-            if re.match("^" + bucket + "$", self.parsed_url.netloc):
-                return bucket
-        return None
-
-    def file_name(self):
-        file_name = self.parsed_url.path[1:]
-        return file_name
-
-    @classmethod
-    def get_credential_to_access_bucket(
-            cls, bucket_name, az_creds, expires_in, boto=None
-    ):
-        az_container = get_value(
-            config, "AZ_CONTAINERS", InternalError("buckets not configured")
-        )
-        
-        if len(az_creds) == 0 and len(az_container) == 0:
-            raise InternalError("no bucket is configured")
-        if len(az_creds) == 0 and len(az_container) > 0:
-            raise InternalError("credential for buckets is not configured")
-
-        bucket_cred = az_container.get(bucket_name)
-        if bucket_cred is None:
-            raise Unauthorized("permission denied for bucket")
-
-        cred_key = get_value(
-            bucket_cred, "cred", InternalError("credential of that bucket is missing")
-        )
-
-        # this is a special case to support public buckets where we do *not* want to
-        # try signing at all
-        if cred_key == "*":
-            return {"az_stgacctname": "*"}
-
-        if "role-arn" not in bucket_cred:
-            return get_value(
-                az_creds,
-                cred_key,
-                InternalError("aws credential of that bucket is not found"),
-            )
-        else:
-            aws_creds_config = get_value(
-                az_creds,
-                cred_key,
-                InternalError("aws credential of that bucket is not found"),
-            )
-            return S3IndexedFileLocation.assume_role(
-                bucket_cred, expires_in, aws_creds_config, boto
-            )
-
-    def get_bucket_region(self):
-        az_container = get_value(
-            config, "AZ_CONTAINERS", InternalError("buckets not configured")
-        )
-        if len(az_container) == 0:
-            return None
-
-        bucket_cred = az_container.get(self.bucket_name())
-        if bucket_cred is None:
-            return None
-
-        if "region" not in bucket_cred:
-            return None
-        else:
-            return bucket_cred["region"]
-
-    def get_signed_url(
-            self, action, expires_in, public_data=False, force_signed_url=True, **kwargs
-    ):
-        az_creds = get_value(
-            config, "AZ_CREDENTIALS", InternalError("credentials not configured")
-        )
-
-        az_container = get_value(
-            config, "AZ_CONTAINERS", InternalError("buckets not configured")
-        )
-    
- 
-        bucket_name = self.bucket_name()
-
-        bucket = az_container.get(bucket_name)
-
-
-        if bucket and bucket.get("endpoint_url"):
-            http_url = bucket["endpoint_url"].strip("/") + "/{}/{}".format(
-                self.parsed_url.netloc, self.parsed_url.path.strip("/")
-            )
-        else:
-            http_url = "https://{}.azure.com/{}".format(
-                self.parsed_url.netloc, self.parsed_url.path.strip("/")
-            )
-            credential = AzIndexedFileLocation.get_credential_to_access_bucket(
-            bucket_name, az_creds, expires_in
-        )
-
-        # azure url
-        print("credential value  {}".format(credential))
-        #az_stgacctname = get_value(
-          #  credential,
-           # "az_stgacctname",
-            #InternalError("aws configuration not found"),
-        #)
-        # `aws_access_key_id == "*"` is a special case to support public buckets
-        # where we do *not* want to try signing at all. the other case is that the
-        # data is public and user requested to not sign the url
-        #if az_stgacctname == "*" or (public_data and not force_signed_url):
-         #   return http_url
-        #region = self.get_bucket_region()
-        #if not region and not bucket.get("endpoint_url"):
-         #   region = flask.current_app.boto.get_bucket_region(
-          #      self.parsed_url.netloc, credential
-           # )
-        #user_info = _get_user_info()
-        url = credential
-        #url = generate_aws_presigned_url(
-         #   http_url,
-          #  ACTION_DICT["az"][action],
-           # credential,
-            #"az",
-            #region,
-            #expires_in,
-            #user_info,
-        #)
-        return url
-
-    def init_multipart_upload(self, expires_in):
-        """
-        Initialize multipart upload
-        Args:
-            expires(int): expiration time
-        Returns:
-            UploadId(str)
-        """
-        aws_creds = get_value(
-            config, "AWS_CREDENTIALS", InternalError("credentials not configured")
-        )
-        credentials = S3IndexedFileLocation.get_credential_to_access_bucket(
-            self.bucket_name(), aws_creds, expires_in
-        )
-
-        return multipart_upload.initilize_multipart_upload(
-            self.parsed_url.netloc, self.parsed_url.path.strip("/"), credentials
-        )
-
-    def generate_presigne_url_for_part_upload(self, uploadId, partNumber, expires_in):
-        """
-        Generate presigned url for uploading object part given uploadId and part number
-        Args:
-            uploadId(str): uploadID of the multipart upload
-            partNumber(int): part number
-            expires(int): expiration time
-        Returns:
-            presigned_url(str)
-        """
-        aws_creds = get_value(
-            config, "AWS_CREDENTIALS", InternalError("credentials not configured")
-        )
-        credential = S3IndexedFileLocation.get_credential_to_access_bucket(
-            self.bucket_name(), aws_creds, expires_in
-        )
-        region = self.get_bucket_region()
-        if not region:
-            region = flask.current_app.boto.get_bucket_region(
-                self.parsed_url.netloc, credential
-            )
-
-        return multipart_upload.generate_presigned_url_for_uploading_part(
-            self.parsed_url.netloc,
-            self.parsed_url.path.strip("/"),
-            credential,
-            uploadId,
-            partNumber,
-            region,
-            expires_in,
-        )
-
-    def complete_multipart_upload(self, uploadId, parts, expires_in):
-        """
-        Complete multipart upload.
-        Args:
-            uploadId(str): upload id of the current upload
-            parts(list(set)): List of part infos
-                    [{"Etag": "1234567", "PartNumber": 1}, {"Etag": "4321234", "PartNumber": 2}]
-        """
-        aws_creds = get_value(
-            config, "AWS_CREDENTIALS", InternalError("credentials not configured")
-        )
-
-        credentials = S3IndexedFileLocation.get_credential_to_access_bucket(
-            self.bucket_name(), aws_creds, expires_in
-        )
-
-        multipart_upload.complete_multipart_upload(
-            self.parsed_url.netloc,
-            self.parsed_url.path.strip("/"),
-            credentials,
-            uploadId,
-            parts,
-        )
-
-    def delete(self, bucket, file_id):
-        try:
-            return flask.current_app.boto.delete_data_file(bucket, file_id)
-        except Exception as e:
-            logger.error(e)
-            return ("Failed to delete data file.", 500)
 class GoogleStorageIndexedFileLocation(IndexedFileLocation):
     """
     An indexed file that lives in a Google Storage bucket.
