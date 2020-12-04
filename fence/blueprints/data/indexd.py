@@ -11,6 +11,9 @@ from cdispyutils.hmac4 import generate_aws_presigned_url
 import flask
 import requests
 
+from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient, __version__
+from azure.storage.blob import AccessPolicy, ResourceTypes, ContainerSasPermissions, generate_account_sas, generate_container_sas,  AccountSasPermissions
+from datetime import datetime, timedelta
 from fence.auth import (
     get_jwt,
     has_oauth,
@@ -46,7 +49,7 @@ ACTION_DICT = {
     "gs": {"upload": "PUT", "download": "GET"},
 }
 
-SUPPORTED_PROTOCOLS = ["s3", "http", "ftp", "https", "gs"]
+SUPPORTED_PROTOCOLS = ["s3", "http", "ftp", "https", "gs", "az"]
 SUPPORTED_ACTIONS = ["upload", "download"]
 ANONYMOUS_USER_ID = "anonymous"
 ANONYMOUS_USERNAME = "anonymous"
@@ -55,7 +58,7 @@ ANONYMOUS_USERNAME = "anonymous"
 def get_signed_url_for_file(action, file_id, file_name=None):
     requested_protocol = flask.request.args.get("protocol", None)
     r_pays_project = flask.request.args.get("userProject", None)
-
+    
     # default to signing the url even if it's a public object
     # this will work so long as we're provided a user token
     force_signed_url = True
@@ -68,17 +71,69 @@ def get_signed_url_for_file(action, file_id, file_name=None):
     if requested_expires_in:
         expires_in = min(requested_expires_in, expires_in)
 
-    signed_url = indexed_file.get_signed_url(
-        requested_protocol,
-        action,
-        expires_in,
-        force_signed_url=force_signed_url,
-        r_pays_project=r_pays_project,
-        file_name=file_name,
-    )
-    return {"url": signed_url}
+    bucket = flask.current_app.config["DATA_UPLOAD_BUCKET"]
+    az_url = "az://{}/{}/{}".format(bucket, file_id, file_name)
+    flag=Azureuploadcontainer(az_url).get_azure_parms("upload", expires_in)
+    if bucket in flag:
+        signed_url = indexed_file.get_signed_url(
+                requested_protocol,
+                action,
+                expires_in,
+                force_signed_url=force_signed_url,
+                r_pays_project=r_pays_project,
+                file_name=file_name,
+        )
+        
+        
+        urls = indexed_file.index_document.get("urls", [])
+        file_name1 = [i.split('/')[5]for i in urls]
+        file_name2=""
+        file_name3=file_name2.join(file_name1)
+        url1 = AzIndexedFileLocation(az_url).get_signed_url("upload", expires_in)
+        az_stgacctname = url1['az_stgacctname']
+        az_secret_access_key = url1['az_secret_access_key']
+        signed_url = make_azure_signed_url(az_secret_access_key, bucket, file_name3, file_id)
+        return {"url": signed_url}
+    else:    
+        signed_url = indexed_file.get_signed_url(
+            requested_protocol,
+            action,
+            expires_in,
+            force_signed_url=force_signed_url,
+            r_pays_project=r_pays_project,
+            file_name=file_name,
+         ) 
+        return {"url": signed_url}
+    signed_url1 = signed_url
 
 
+
+def make_azure_signed_url(az_connectionstrng, az_container_name, file_name, file_id):
+ 
+        # Instantiate a new BlobServiceClient using a connection string
+        try:    
+            blob_service_client = BlobServiceClient.from_connection_string(az_connectionstrng)
+            # Instantiate a new ContainerClient
+            container_client = blob_service_client.get_container_client(az_container_name)
+           
+        except:
+            print("Error connecting to blob service or invalid blob not found\n")
+            exit
+        else:
+            print(f"The existence of blob_client.exists\n")
+ 
+        account_sas_token = generate_account_sas(
+                blob_service_client.account_name,
+                account_key=blob_service_client.credential.account_key,
+                resource_types=ResourceTypes(object=True),
+                permission=AccountSasPermissions(read=True,write=True,create=True),
+                expiry=datetime.utcnow() + timedelta(hours=1)
+            )
+        
+        az_signed_url = f"https://{blob_service_client.account_name}.blob.core.windows.net/{az_container_name}/{file_id}/{file_name}?{account_sas_token}"
+        print(f"Pre-signed URL:{az_signed_url}")
+ 
+        return az_signed_url
 class BlankIndex(object):
     """
     A blank record in indexd, to use for the data upload flow.
@@ -159,11 +214,7 @@ class BlankIndex(object):
         self.logger.info(
             "created blank index record with GUID {} for upload".format(guid)
         )
-        # KJ10122020
-
-        print("KJ value for document :{}".format(document))
-
-        print('did value is {}'.format(document['did']))
+        
         return document
 
     def make_signed_url(self, file_name, expires_in=None):
@@ -181,41 +232,33 @@ class BlankIndex(object):
         try:
             bucket = flask.current_app.config["DATA_UPLOAD_BUCKET"]
             print("bucket values is {}".format(bucket))
-            #bucket = flask.current_app.config["gen3blobstorage"]
+ 
         except KeyError:
             raise InternalError(
                 "fence not configured with data upload bucket; can't create signed URL"
             )
+
         s3_url = "s3://{}/{}/{}".format(bucket, self.guid, file_name)
-        flag = flask.current_app.config["TARGET_UPLOAD_STORAGE"]
-        print("KJ flag value is {}".format(flag))
-        #s3_url = "{}".format(bucket.aws_secret_accesss_key)
-        if flag == "s3":
-                    
+        az_url = "az://{}/{}/{}".format(bucket, self.guid, file_name)
+
+        flag=Azureuploadcontainer(az_url).get_azure_parms("upload", expires_in)
+        if bucket in flag:
+            url1 = AzIndexedFileLocation(az_url).get_signed_url("upload", expires_in)
+            
+            az_stgacctname = url1['az_stgacctname']
+            az_secret_access_key = url1['az_secret_access_key']
+            url = self.make_azure_signed_url(az_secret_access_key, bucket, file_name)  
+        else:
             url = S3IndexedFileLocation(s3_url).get_signed_url("upload", expires_in)
-       # if bucket == "gen3blobstorage":
-        elif flag == "az":
-            url = AzIndexedFileLocation(s3_url).get_signed_url("upload", expires_in)
-            az_stgacctname = url['az_stgacctname'] 
-            az_secret_access_key = url['az_secret_access_key']
-           # url1=  url[8:23]
-           # url_split = url.split("=")
-           # url_split1 = url_split[2].split("%")
-           # url_split2 = url_split1[0] + "=="
-            url = az_stgacctname + ";" + az_secret_access_key 
 
-        #KJ10132020
-
-        #print("KJ S3 URL value is {}".format(s3_url))
-        print("KJ URL value is {}".format(url))
+        
         self.logger.info(
             "created presigned URL to upload file {} with ID {}. SUCCESS!".format(
                 file_name, self.guid
             )
         )
-        # KJ10122020
 
-        print("KJ value for bucket : {}".format( bucket))
+        
         return url
 
     @staticmethod
@@ -236,9 +279,7 @@ class BlankIndex(object):
                 "fence not configured with data upload bucket; can't create signed URL"
             )
         s3_url = "s3://{}/{}".format(bucket, key)
-        #KJ10122020
-
-        print('KJ Flow is coming to multipart upload')
+        
         return S3IndexedFileLocation(s3_url).init_multipart_upload(expires_in)
 
     @staticmethod
@@ -291,6 +332,34 @@ class BlankIndex(object):
         )
 
 
+    def make_azure_signed_url(self, az_connectionstrng, az_container_name, file_name):
+
+        # Instantiate a new BlobServiceClient using a connection string
+       try:    
+           blob_service_client = BlobServiceClient.from_connection_string(az_connectionstrng)
+
+            # Instantiate a new ContainerClient
+           container_client = blob_service_client.get_container_client(az_container_name)
+       except:
+            print("Error connecting to blob service or invalid blob not found\n")
+            exit
+       else:
+            print(f"The existence of blob_client.exists\n")
+
+       account_sas_token = generate_account_sas(
+                blob_service_client.account_name,
+                account_key=blob_service_client.credential.account_key,
+                resource_types=ResourceTypes(object=True),
+                permission=AccountSasPermissions(read=True,write=True,create=True),
+                expiry=datetime.utcnow() + timedelta(hours=1)
+            )
+  
+       az_signed_url = f"https://{blob_service_client.account_name}.blob.core.windows.net/{az_container_name}/{self.guid}/{file_name}?{account_sas_token}"
+       print(f"Pre-signed URL:{az_signed_url}")
+
+       return az_signed_url    
+
+
 class IndexedFile(object):
     """
     A file from the index service that will contain information about access and where
@@ -316,14 +385,18 @@ class IndexedFile(object):
             flask.current_app.config.get("INDEXD")
             or flask.current_app.config["BASE_URL"] + "/index"
         )
+        
         return indexd_server.rstrip("/")
 
     @cached_property
     def index_document(self):
         indexd_server = config.get("INDEXD") or config["BASE_URL"] + "/index"
         url = indexd_server + "/index/"
+        
+
         try:
             res = requests.get(url + self.file_id)
+            
         except Exception as e:
             logger.error(
                 "failed to reach indexd at {0}: {1}".format(url + self.file_id, e)
@@ -357,6 +430,7 @@ class IndexedFile(object):
     @cached_property
     def indexed_file_locations(self):
         urls = self.index_document.get("urls", [])
+        
         return list(map(IndexedFileLocation.from_url, urls))
 
     def get_signed_url(
@@ -397,6 +471,7 @@ class IndexedFile(object):
         if not protocol:
             # no protocol specified, return first location as signed url
             try:
+                print(" self indexed file location zero :{}".format(self.indexed_file_locations[0]))
                 return self.indexed_file_locations[0].get_signed_url(
                     action,
                     expires_in,
@@ -559,18 +634,18 @@ class IndexedFileLocation(object):
     @staticmethod
     def from_url(url):
         protocol = urlparse(url).scheme
-        print("KJ protocol loop is coming")
+        
         if (protocol is not None) and (protocol not in SUPPORTED_PROTOCOLS):
             raise NotSupported(
                 "The specified protocol {} is not supported".format(protocol)
             )
-        #KJ10132020
-
-        print("KJ protocol value :".format(protocol))
+        
         if protocol == "s3":
             return S3IndexedFileLocation(url)
         elif protocol == "gs":
             return GoogleStorageIndexedFileLocation(url)
+        
+
         return IndexedFileLocation(url)
 
     def get_signed_url(
@@ -656,9 +731,9 @@ class S3IndexedFileLocation(IndexedFileLocation):
         bucket_cred = s3_buckets.get(bucket_name)
         if bucket_cred is None:
             raise Unauthorized("permission denied for bucket")
-
         cred_key = get_value(
-            bucket_cred, "cred", InternalError("credential of that bucket is missing")
+	    bucket_cred, "cred", InternalError("credential of that bucket is missing")	
+
         )
 
         # this is a special case to support public buckets where we do *not* want to
@@ -692,7 +767,7 @@ class S3IndexedFileLocation(IndexedFileLocation):
         bucket_cred = s3_buckets.get(self.bucket_name())
         if bucket_cred is None:
             return None
-
+        
         if "region" not in bucket_cred:
             return None
         else:
@@ -701,20 +776,16 @@ class S3IndexedFileLocation(IndexedFileLocation):
     def get_signed_url(
         self, action, expires_in, public_data=False, force_signed_url=True, **kwargs
     ):
-        print("kj loop is coming to aws get_signed_url")
+    
         aws_creds = get_value(
             config, "AWS_CREDENTIALS", InternalError("credentials not configured")
         )
         s3_buckets = get_value(
             config, "S3_BUCKETS", InternalError("buckets not configured")
         )
-        print(" value of aws config".format(config))
-        print(" value of aws_creds {}".format(aws_creds))
-        print(" value of aws_containers {}".format(s3_buckets))
+
         bucket_name = self.bucket_name()
         bucket = s3_buckets.get(bucket_name)
-        print(" value of aws bucket name {}".format(bucket_name))
-        print(" value of aws bucket {}".format(bucket))
 
         if bucket and bucket.get("endpoint_url"):
             http_url = bucket["endpoint_url"].strip("/") + "/{}/{}".format(
@@ -869,6 +940,7 @@ class AzIndexedFileLocation(IndexedFileLocation):
                 using `flask.current_app`.
         """
 
+        
         boto = boto or flask.current_app.boto
         role_arn = get_value(
             bucket_cred, "role-arn", InternalError("role-arn of that bucket is missing")
@@ -983,12 +1055,9 @@ class AzIndexedFileLocation(IndexedFileLocation):
         az_container = get_value(
             config, "AZ_CONTAINERS", InternalError("buckets not configured")
         )
-    
- 
+        
         bucket_name = self.bucket_name()
-
         bucket = az_container.get(bucket_name)
-
 
         if bucket and bucket.get("endpoint_url"):
             http_url = bucket["endpoint_url"].strip("/") + "/{}/{}".format(
@@ -1002,34 +1071,8 @@ class AzIndexedFileLocation(IndexedFileLocation):
             bucket_name, az_creds, expires_in
         )
 
-        # azure url
-        print("credential value  {}".format(credential))
-        #az_stgacctname = get_value(
-          #  credential,
-           # "az_stgacctname",
-            #InternalError("aws configuration not found"),
-        #)
-        # `aws_access_key_id == "*"` is a special case to support public buckets
-        # where we do *not* want to try signing at all. the other case is that the
-        # data is public and user requested to not sign the url
-        #if az_stgacctname == "*" or (public_data and not force_signed_url):
-         #   return http_url
-        #region = self.get_bucket_region()
-        #if not region and not bucket.get("endpoint_url"):
-         #   region = flask.current_app.boto.get_bucket_region(
-          #      self.parsed_url.netloc, credential
-           # )
-        #user_info = _get_user_info()
+        
         url = credential
-        #url = generate_aws_presigned_url(
-         #   http_url,
-          #  ACTION_DICT["az"][action],
-           # credential,
-            #"az",
-            #region,
-            #expires_in,
-            #user_info,
-        #)
         return url
 
     def init_multipart_upload(self, expires_in):
@@ -1113,6 +1156,22 @@ class AzIndexedFileLocation(IndexedFileLocation):
         except Exception as e:
             logger.error(e)
             return ("Failed to delete data file.", 500)
+
+
+class Azureuploadcontainer(IndexedFileLocation):
+
+    def get_azure_parms(
+        self, action, expires_in, public_data=False, force_signed_url=True, **kwargs
+    ):
+        az_credentials = get_value(
+            config, "AZ_CREDENTIALS", InternalError("credentials not configured")
+        )
+        az_containers = get_value(
+            config, "AZ_CONTAINERS", InternalError("buckets not configured")
+        )
+    
+        return az_containers
+
 class GoogleStorageIndexedFileLocation(IndexedFileLocation):
     """
     An indexed file that lives in a Google Storage bucket.
@@ -1207,7 +1266,6 @@ class GoogleStorageIndexedFileLocation(IndexedFileLocation):
             user_id=user_id, username=username, proxy_group_id=proxy_group_id
         )
 
-        # Make sure the service account key expiration is later
         # than the expiration for the signed url. If it's not, we need to
         # provision a new service account key.
         #
@@ -1260,7 +1318,6 @@ class GoogleStorageIndexedFileLocation(IndexedFileLocation):
                 logger.error(exc)
                 status_code = 500
             return ("Failed to delete data file.", status_code)
-
 
 def _get_user_info():
     """
