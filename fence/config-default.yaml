@@ -511,7 +511,7 @@ STORAGE_CREDENTIALS: {}
 #    is_mocked: true
 
 # //////////////////////////////////////////////////////////////////////////////////////
-# AWS and AZURE BUCKETS AND CREDENTIALS
+# AWS BUCKETS AND CREDENTIALS
 #   - Support `/data` endpoints
 # //////////////////////////////////////////////////////////////////////////////////////
 AWS_CREDENTIALS: {}
@@ -543,18 +543,21 @@ S3_BUCKETS: {}
 #     region: 'us-east-1'
 #     role-arn: 'arn:aws:iam::role1'
 #
-# `DATA_UPLOAD_BUCKET` specifies an S3 bucket or Azure Container to which data files are uploaded,
-# using the `/data/upload` endpoint. This must be one of the first keys under
-# `S3_BUCKETS` or 'AZ_CONTAINERS' (since these are the buckets fence has credentials for).
+# //////////////////////////////////////////////////////////////////////////////////////
+# AZURE Storage Containers AND CREDENTIALS
+#   - Support `/data` endpoints
+# //////////////////////////////////////////////////////////////////////////////////////
 AZ_CREDENTIALS: {}
 # Note: Remove the {} and supply creds if needed.  See example below...
+# unlike AWS, the storage account name is part of the credentials.
 #  'CREDA':
-#    az_stgacctname: ''   #use storeage account name from Azure
-#    az_secret_access_key: ''   #use secret key from azure
+#    az_stgacctname: ''         #use storeage account name from Azure
+#    az_secret_access_key: ''   #use secret key from Azure
 #  'CREDB':
 #    az_stgacctname:  ''
 #    az_secret_access_key: ''
 #
+# Note: Containers in Azure are kind of like Buckets in AWS. The container must be created in the storage account.
 AZ_CONTAINERS: {}
 # NOTE: Remove the {} and supply Containers. Example in comments below
 #   container1:
@@ -562,6 +565,9 @@ AZ_CONTAINERS: {}
 #   container2:
 #     cred: 'CREDB'      
 #
+# `DATA_UPLOAD_BUCKET` specifies an S3 bucket or Azure Container to which data files are uploaded,
+# using the `/data/upload` endpoint. This must be one of the first keys under
+# `S3_BUCKETS` or 'AZ_CONTAINERS' (since these are the buckets fence has credentials for).
 DATA_UPLOAD_BUCKET: 'bucket1'
 
 # //////////////////////////////////////////////////////////////////////////////////////
