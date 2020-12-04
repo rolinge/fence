@@ -546,8 +546,6 @@ S3_BUCKETS: {}
 # `DATA_UPLOAD_BUCKET` specifies an S3 bucket or Azure Container to which data files are uploaded,
 # using the `/data/upload` endpoint. This must be one of the first keys under
 # `S3_BUCKETS` or 'AZ_CONTAINERS' (since these are the buckets fence has credentials for).
-# 'TARGET_CLOUD_STORAGE' specifies the destination Cloud storage like S3 or Azure.
-# Pre-defined values for 'TARGET_CLOUD_STORAGE'can be 's3'/'az'.
 AZ_CREDENTIALS: {}
 # Note: Remove the {} and supply creds if needed.  See example below...
 #  'CREDA':
@@ -564,7 +562,6 @@ AZ_CONTAINERS: {}
 #   container2:
 #     cred: 'CREDB'      
 #
-TARGET_UPLOAD_STORAGE: 's3'  #use pre-defined values such as 's3'/'az'
 DATA_UPLOAD_BUCKET: 'bucket1'
 
 # //////////////////////////////////////////////////////////////////////////////////////
