@@ -58,7 +58,9 @@ ANONYMOUS_USERNAME = "anonymous"
 def get_signed_url_for_file(action, file_id, file_name=None):
     requested_protocol = flask.request.args.get("protocol", None)
     r_pays_project = flask.request.args.get("userProject", None)
-    
+    #KJ11092020
+    print("requested protocol: {}".format(requested_protocol))
+    print("r_pays_project: {}".format(r_pays_project))
     # default to signing the url even if it's a public object
     # this will work so long as we're provided a user token
     force_signed_url = True
@@ -66,14 +68,21 @@ def get_signed_url_for_file(action, file_id, file_name=None):
         force_signed_url = False
 
     indexed_file = IndexedFile(file_id)
+    print("indexed file :{}".format(indexed_file)) 
+    print(type(indexed_file))
+    print("file id :{}".format(file_id))
+    print("file name :{}".format(file_name))
     expires_in = config.get("MAX_PRESIGNED_URL_TTL", 3600)
     requested_expires_in = get_valid_expiration_from_request()
     if requested_expires_in:
         expires_in = min(requested_expires_in, expires_in)
 
+    print("protocol: {}".format(requested_protocol))
     bucket = flask.current_app.config["DATA_UPLOAD_BUCKET"]
     az_url = "az://{}/{}/{}".format(bucket, file_id, file_name)
+    print("az_url :{}".format(az_url))
     flag=Azureuploadcontainer(az_url).get_azure_parms("upload", expires_in)
+    #bucket = flask.current_app.config["DATA_UPLOAD_BUCKET"]
     if bucket in flag:
         signed_url = indexed_file.get_signed_url(
                 requested_protocol,
@@ -105,6 +114,7 @@ def get_signed_url_for_file(action, file_id, file_name=None):
          ) 
         return {"url": signed_url}
     signed_url1 = signed_url
+    print("final signed url :{}".format(signed_url))
 
 
 
@@ -214,7 +224,11 @@ class BlankIndex(object):
         self.logger.info(
             "created blank index record with GUID {} for upload".format(guid)
         )
-        
+        # KJ10122020
+
+        print("KJ value for document :{}".format(document))
+
+        print('did value is {}'.format(document['did']))
         return document
 
     def make_signed_url(self, file_name, expires_in=None):
@@ -232,7 +246,6 @@ class BlankIndex(object):
         try:
             bucket = flask.current_app.config["DATA_UPLOAD_BUCKET"]
             print("bucket values is {}".format(bucket))
-            print(f"az://{bucket}/{self.guid}/{file_name}")
  
         except KeyError:
             raise InternalError(
@@ -248,18 +261,23 @@ class BlankIndex(object):
             
             az_stgacctname = url1['az_stgacctname']
             az_secret_access_key = url1['az_secret_access_key']
+            print("acctname :{}".format(az_stgacctname))
+            print("key :{}".format(az_secret_access_key))
+            #url = Az_signed_url(az_url).make_azure_signed_url(az_secret_access_key, bucket, file_name)
             url = self.make_azure_signed_url(az_secret_access_key, bucket, file_name)  
         else:
             url = S3IndexedFileLocation(s3_url).get_signed_url("upload", expires_in)
 
-        
+        #KJ10132020
+        print("Pre-Signed URL value is {}".format(url))
         self.logger.info(
             "created presigned URL to upload file {} with ID {}. SUCCESS!".format(
                 file_name, self.guid
             )
         )
 
-        
+        # KJ10122020
+        print("KJ value for bucket : {}".format( bucket))
         return url
 
     @staticmethod
@@ -280,7 +298,9 @@ class BlankIndex(object):
                 "fence not configured with data upload bucket; can't create signed URL"
             )
         s3_url = "s3://{}/{}".format(bucket, key)
-        
+        #KJ10122020
+
+        print('KJ Flow is coming to multipart upload')
         return S3IndexedFileLocation(s3_url).init_multipart_upload(expires_in)
 
     @staticmethod
@@ -386,18 +406,22 @@ class IndexedFile(object):
             flask.current_app.config.get("INDEXD")
             or flask.current_app.config["BASE_URL"] + "/index"
         )
-        
+        #KJ11092020
+        print("indexd_server : {}".format(indexd_server))
         return indexd_server.rstrip("/")
 
     @cached_property
     def index_document(self):
         indexd_server = config.get("INDEXD") or config["BASE_URL"] + "/index"
         url = indexd_server + "/index/"
-        
+        #KJ11092020
+        print("url : {}".format(url))
 
         try:
             res = requests.get(url + self.file_id)
-            
+            #KJ11092020
+            print("res: {}".format(res))
+            print("res status code : {}".format(res.status_code))
         except Exception as e:
             logger.error(
                 "failed to reach indexd at {0}: {1}".format(url + self.file_id, e)
@@ -431,7 +455,7 @@ class IndexedFile(object):
     @cached_property
     def indexed_file_locations(self):
         urls = self.index_document.get("urls", [])
-        
+        print("indexd file location url : {}".format(urls))
         return list(map(IndexedFileLocation.from_url, urls))
 
     def get_signed_url(
@@ -635,17 +659,22 @@ class IndexedFileLocation(object):
     @staticmethod
     def from_url(url):
         protocol = urlparse(url).scheme
-        
+        print("KJ protocol loop is coming")
         if (protocol is not None) and (protocol not in SUPPORTED_PROTOCOLS):
             raise NotSupported(
                 "The specified protocol {} is not supported".format(protocol)
             )
-        
+        #KJ10132020
+
+        print("KJ protocol value :".format(protocol))
         if protocol == "s3":
             return S3IndexedFileLocation(url)
         elif protocol == "gs":
             return GoogleStorageIndexedFileLocation(url)
         
+        #elif protocol == "az":
+        #    print("url for download :{}".format(url))
+        #    return AzIndexedFileLocation(url)
 
         return IndexedFileLocation(url)
 
@@ -777,7 +806,7 @@ class S3IndexedFileLocation(IndexedFileLocation):
     def get_signed_url(
         self, action, expires_in, public_data=False, force_signed_url=True, **kwargs
     ):
-    
+        print("kj loop is coming to aws get_signed_url")
         aws_creds = get_value(
             config, "AWS_CREDENTIALS", InternalError("credentials not configured")
         )
@@ -941,7 +970,7 @@ class AzIndexedFileLocation(IndexedFileLocation):
                 using `flask.current_app`.
         """
 
-        
+        print("az class url input: {}".format(self.IndexedFileLocation))
         boto = boto or flask.current_app.boto
         role_arn = get_value(
             bucket_cred, "role-arn", InternalError("role-arn of that bucket is missing")
@@ -986,6 +1015,7 @@ class AzIndexedFileLocation(IndexedFileLocation):
 
     def file_name(self):
         file_name = self.parsed_url.path[1:]
+        print("az file name :{}".format(file_name))
         return file_name
 
     @classmethod
@@ -1057,6 +1087,8 @@ class AzIndexedFileLocation(IndexedFileLocation):
             config, "AZ_CONTAINERS", InternalError("buckets not configured")
         )
         
+        print("azure get signed url loop")
+        #print("az class url input: {}".format(self.IndexedFileLocation))
         bucket_name = self.bucket_name()
         bucket = az_container.get(bucket_name)
 
@@ -1072,7 +1104,18 @@ class AzIndexedFileLocation(IndexedFileLocation):
             bucket_name, az_creds, expires_in
         )
 
-        
+        #file_name1 = self.file_name
+        #print("az file name :{}".format(file_name1))
+        #indexdurl = self.IndexedFileLocation
+        #indexdurl1 = indexdurl.split("/")
+        #az_bucket = indexdurl1[2]
+        #az_filename = indexdurl1[4]
+        #print("az bucket :{}".format(az_bucket))
+        #print("az filename :{}".format(az_filename))
+        # azure url
+        #print("az class file name :{}".format(file_name))
+        print("credential value  {}".format(credential))
+
         url = credential
         return url
 

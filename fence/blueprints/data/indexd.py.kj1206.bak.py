@@ -232,7 +232,6 @@ class BlankIndex(object):
         try:
             bucket = flask.current_app.config["DATA_UPLOAD_BUCKET"]
             print("bucket values is {}".format(bucket))
-            print(f"az://{bucket}/{self.guid}/{file_name}")
  
         except KeyError:
             raise InternalError(
