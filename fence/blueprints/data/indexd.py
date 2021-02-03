@@ -91,8 +91,8 @@ def get_signed_url_for_file(action, file_id, file_name=None):
         file_name3=file_name2.join(file_name1)
         url1 = AzIndexedFileLocation(az_url).get_signed_url("upload", expires_in)
         az_stgacctname = url1['az_stgacctname']
-        az_secret_access_key = url1['az_secret_access_key']
-        signed_url = make_azure_signed_url(az_secret_access_key, bucket, file_name3, file_id)
+        az_connection_string = url1['az_connection_string']
+        signed_url = make_azure_signed_url(az_connection_string, bucket, file_name3, file_id)
         return {"url": signed_url}
     else:    
         signed_url = indexed_file.get_signed_url(
@@ -108,11 +108,11 @@ def get_signed_url_for_file(action, file_id, file_name=None):
 
 
 
-def make_azure_signed_url(az_connectionstrng, az_container_name, file_name, file_id):
+def make_azure_signed_url(az_connectionstring, az_container_name, file_name, file_id):
  
         # Instantiate a new BlobServiceClient using a connection string
         try:    
-            blob_service_client = BlobServiceClient.from_connection_string(az_connectionstrng)
+            blob_service_client = BlobServiceClient.from_connection_string(az_connectionstring)
             # Instantiate a new ContainerClient
             container_client = blob_service_client.get_container_client(az_container_name)
            
@@ -247,8 +247,8 @@ class BlankIndex(object):
             url1 = AzIndexedFileLocation(az_url).get_signed_url("upload", expires_in)
             
             az_stgacctname = url1['az_stgacctname']
-            az_secret_access_key = url1['az_secret_access_key']
-            url = self.make_azure_signed_url(az_secret_access_key, bucket, file_name)  
+            az_connection_string = url1['az_connection_string']
+            url = self.make_azure_signed_url(az_connection_string, bucket, file_name)  
         else:
             url = S3IndexedFileLocation(s3_url).get_signed_url("upload", expires_in)
 
@@ -333,11 +333,11 @@ class BlankIndex(object):
         )
 
 
-    def make_azure_signed_url(self, az_connectionstrng, az_container_name, file_name):
+    def make_azure_signed_url(self, az_connectionstring, az_container_name, file_name):
 
         # Instantiate a new BlobServiceClient using a connection string
        try:    
-           blob_service_client = BlobServiceClient.from_connection_string(az_connectionstrng)
+           blob_service_client = BlobServiceClient.from_connection_string(az_connectionstring)
 
             # Instantiate a new ContainerClient
            container_client = blob_service_client.get_container_client(az_container_name)
@@ -956,7 +956,7 @@ class AzIndexedFileLocation(IndexedFileLocation):
                 "AccessKeyId",
                 InternalError("outdated format. AccessKeyId missing"),
             ),
-            "az_secret_access_key": get_value(
+            "az_connection_string": get_value(
                 cred,
                 "SecretAccessKey",
                 InternalError("outdated format. SecretAccessKey missing"),
