@@ -58,7 +58,7 @@ ANONYMOUS_USERNAME = "anonymous"
 def get_signed_url_for_file(action, file_id, file_name=None):
     requested_protocol = flask.request.args.get("protocol", None)
     r_pays_project = flask.request.args.get("userProject", None)
-    
+
     # default to signing the url even if it's a public object
     # this will work so long as we're provided a user token
     force_signed_url = True
@@ -85,8 +85,8 @@ def get_signed_url_for_file(action, file_id, file_name=None):
                 r_pays_project=r_pays_project,
                 file_name=file_name,
         )
-        
-        
+
+
         urls = indexed_file.index_document.get("urls", [])
         file_name1 = [i.split('/')[5]for i in urls]
         file_name2=""
@@ -96,7 +96,7 @@ def get_signed_url_for_file(action, file_id, file_name=None):
         az_connection_string = url1['az_connection_string']
         signed_url = make_azure_signed_url(az_connection_string, bucket, file_name3, file_id)
         return {"url": signed_url}
-    else:    
+    else:
         signed_url = indexed_file.get_signed_url(
             requested_protocol,
             action,
@@ -104,26 +104,50 @@ def get_signed_url_for_file(action, file_id, file_name=None):
             force_signed_url=force_signed_url,
             r_pays_project=r_pays_project,
             file_name=file_name,
-         ) 
+         )
+
+
+         if action == "download":  # for now only record download requests
+             create_presigned_url_audit_log(
+                 protocol=requested_protocol, indexed_file=indexed_file, action=action
+             )
+
         return {"url": signed_url}
-    signed_url1 = signed_url
+
+def create_presigned_url_audit_log(indexed_file, action, protocol):
+    user_info = _get_user_info(sub_to_string=False)
+    resource_paths = indexed_file.index_document.get("authz", [])
+    if not resource_paths:
+        # fall back on ACL
+        resource_paths = indexed_file.index_document.get("acl", [])
+    if not protocol and indexed_file.indexed_file_locations:
+        protocol = indexed_file.indexed_file_locations[0].protocol
+    flask.current_app.audit_service_client.create_presigned_url_log(
+        username=user_info["username"],
+        sub=user_info["user_id"],
+        guid=indexed_file.file_id,
+        resource_paths=resource_paths,
+        action=action,
+        protocol=protocol,
+    )
+
 
 
 
 def make_azure_signed_url(az_connectionstring, az_container_name, file_name, file_id):
- 
+
         # Instantiate a new BlobServiceClient using a connection string
-        try:    
+        try:
             blob_service_client = BlobServiceClient.from_connection_string(az_connectionstring)
             # Instantiate a new ContainerClient
             container_client = blob_service_client.get_container_client(az_container_name)
-           
+
         except:
             print("Error connecting to blob service or invalid blob not found\n")
             exit
         else:
             print(f"The existence of blob_client.exists\n")
- 
+
         account_sas_token = generate_account_sas(
                 blob_service_client.account_name,
                 account_key=blob_service_client.credential.account_key,
@@ -131,10 +155,10 @@ def make_azure_signed_url(az_connectionstring, az_container_name, file_name, fil
                 permission=AccountSasPermissions(read=True,write=True,create=True),
                 expiry=datetime.utcnow() + timedelta(hours=1)
             )
-        
+
         az_signed_url = f"https://{blob_service_client.account_name}.blob.core.windows.net/{az_container_name}/{file_id}/{file_name}?{account_sas_token}"
         print(f"Pre-signed URL:{az_signed_url}")
- 
+
         return az_signed_url
 class BlankIndex(object):
     """
@@ -216,7 +240,7 @@ class BlankIndex(object):
         self.logger.info(
             "created blank index record with GUID {} for upload".format(guid)
         )
-        
+
         return document
 
     def make_signed_url(self, file_name, expires_in=None):
@@ -235,7 +259,7 @@ class BlankIndex(object):
             bucket = flask.current_app.config["DATA_UPLOAD_BUCKET"]
             print("bucket values is {}".format(bucket))
             print(f"az://{bucket}/{self.guid}/{file_name}")
- 
+
         except KeyError:
             raise InternalError(
                 "fence not configured with data upload bucket; can't create signed URL"
@@ -247,21 +271,21 @@ class BlankIndex(object):
         flag=Azureuploadcontainer(az_url).get_azure_parms("upload", expires_in)
         if bucket in flag:
             url1 = AzIndexedFileLocation(az_url).get_signed_url("upload", expires_in)
-            
+
             az_stgacctname = url1['az_stgacctname']
             az_connection_string = url1['az_connection_string']
-            url = self.make_azure_signed_url(az_connection_string, bucket, file_name)  
+            url = self.make_azure_signed_url(az_connection_string, bucket, file_name)
         else:
             url = S3IndexedFileLocation(s3_url).get_signed_url("upload", expires_in)
 
-        
+
         self.logger.info(
             "created presigned URL to upload file {} with ID {}. SUCCESS!".format(
                 file_name, self.guid
             )
         )
 
-        
+
         return url
 
     @staticmethod
@@ -282,7 +306,7 @@ class BlankIndex(object):
                 "fence not configured with data upload bucket; can't create signed URL"
             )
         s3_url = "s3://{}/{}".format(bucket, key)
-        
+
         return S3IndexedFileLocation(s3_url).init_multipart_upload(expires_in)
 
     @staticmethod
@@ -338,7 +362,7 @@ class BlankIndex(object):
     def make_azure_signed_url(self, az_connectionstring, az_container_name, file_name):
 
         # Instantiate a new BlobServiceClient using a connection string
-       try:    
+       try:
            blob_service_client = BlobServiceClient.from_connection_string(az_connectionstring)
 
             # Instantiate a new ContainerClient
@@ -356,11 +380,11 @@ class BlankIndex(object):
                 permission=AccountSasPermissions(read=True,write=True,create=True),
                 expiry=datetime.utcnow() + timedelta(hours=1)
             )
-  
+
        az_signed_url = f"https://{blob_service_client.account_name}.blob.core.windows.net/{az_container_name}/{self.guid}/{file_name}?{account_sas_token}"
        print(f"Pre-signed URL:{az_signed_url}")
 
-       return az_signed_url    
+       return az_signed_url
 
 
 class IndexedFile(object):
@@ -388,18 +412,18 @@ class IndexedFile(object):
             flask.current_app.config.get("INDEXD")
             or flask.current_app.config["BASE_URL"] + "/index"
         )
-        
+
         return indexd_server.rstrip("/")
 
     @cached_property
     def index_document(self):
         indexd_server = config.get("INDEXD") or config["BASE_URL"] + "/index"
         url = indexd_server + "/index/"
-        
+
 
         try:
             res = requests.get(url + self.file_id)
-            
+
         except Exception as e:
             logger.error(
                 "failed to reach indexd at {0}: {1}".format(url + self.file_id, e)
@@ -433,7 +457,7 @@ class IndexedFile(object):
     @cached_property
     def indexed_file_locations(self):
         urls = self.index_document.get("urls", [])
-        
+
         return list(map(IndexedFileLocation.from_url, urls))
 
     def get_signed_url(
@@ -445,14 +469,29 @@ class IndexedFile(object):
         r_pays_project=None,
         file_name=None,
     ):
-        if self.public and action == "upload":
-            raise Unauthorized("Cannot upload on public files")
-        # don't check the authorization if the file is public
-        # (downloading public files with no auth is fine)
-        if not self.public and not self.check_authorization(action):
-            raise Unauthorized(
-                "You don't have access permission on this file: {}".format(self.file_id)
-            )
+        if self.index_document.get("authz"):
+            action_to_permission = {
+                "upload": "write-storage",
+                "download": "read-storage",
+            }
+            if not self.check_authz(action_to_permission[action]):
+                raise Unauthorized(
+                    f"Either you weren't logged in or you don't have "
+                    f"{action_to_permission[action]} permission "
+                    f"on {self.index_document['authz']} for fence"
+                )
+        else:
+            if self.public_acl and action == "upload":
+                raise Unauthorized(
+                    "Cannot upload on public files while using acl field"
+                )
+            # don't check the authorization if the file is public
+            # (downloading public files with no auth is fine)
+            if not self.public_acl and not self.check_authorization(action):
+                raise Unauthorized(
+                    f"You don't have access permission on this file: {self.file_id}"
+                )
+
         if action is not None and action not in SUPPORTED_ACTIONS:
             raise NotSupported("action {} is not supported".format(action))
         return self._get_signed_url(
@@ -519,8 +558,17 @@ class IndexedFile(object):
         logger.debug(
             f"authz check can user {action} on {self.index_document['authz']} for fence?"
         )
+
+        try:
+            token = get_jwt()
+        except Unauthorized:
+            #  get_jwt raises an Unauthorized error when user is anonymous (no
+            #  availble token), so to allow anonymous users possible access to
+            #  public data, we still make the request to Arborist
+            token = None
+
         return flask.current_app.arborist.auth_request(
-            jwt=get_jwt(),
+            jwt=token,
             service="fence",
             methods=action,
             resources=self.index_document["authz"],
@@ -532,9 +580,15 @@ class IndexedFile(object):
 
     @cached_property
     def public(self):
-        authz_resources = list(self.set_acls)
-        authz_resources.extend(self.index_document.get("authz", []))
-        return "*" in authz_resources or "/open" in authz_resources
+        return self.public_acl or self.public_authz
+
+    @cached_property
+    def public_acl(self):
+        return "*" in self.set_acls
+
+    @cached_property
+    def public_authz(self):
+        return "/open" in self.index_document.get("authz", [])
 
     @login_required({"data"})
     def check_authorization(self, action):
@@ -552,21 +606,7 @@ class IndexedFile(object):
             )
             return self.index_document.get("uploader") == username
 
-        try:
-            action_to_method = {"upload": "write-storage", "download": "read-storage"}
-            method = action_to_method[action]
-            # action should be upload or download
-            # return bool for authorization
-            return self.check_authz(method)
-        except ValueError:
-            # this is ok; we'll default to ACL field (previous behavior)
-            # may want to deprecate in future
-            logger.info(
-                "Couldn't find `authz` field on indexd record, falling back to `acl`."
-            )
-
         given_acls = set(filter_auth_ids(action, flask.g.user.project_access))
-
         return len(self.set_acls & given_acls) > 0
 
     @login_required({"data"})
@@ -640,17 +680,17 @@ class IndexedFileLocation(object):
     @staticmethod
     def from_url(url):
         protocol = urlparse(url).scheme
-        
+
         if (protocol is not None) and (protocol not in SUPPORTED_PROTOCOLS):
             raise NotSupported(
                 "The specified protocol {} is not supported".format(protocol)
             )
-        
+
         if protocol == "s3":
             return S3IndexedFileLocation(url)
         elif protocol == "gs":
             return GoogleStorageIndexedFileLocation(url)
-        
+
 
         return IndexedFileLocation(url)
 
@@ -738,7 +778,7 @@ class S3IndexedFileLocation(IndexedFileLocation):
         if bucket_cred is None:
             raise Unauthorized("permission denied for bucket")
         cred_key = get_value(
-	    bucket_cred, "cred", InternalError("credential of that bucket is missing")	
+	    bucket_cred, "cred", InternalError("credential of that bucket is missing")
 
         )
 
@@ -773,7 +813,7 @@ class S3IndexedFileLocation(IndexedFileLocation):
         bucket_cred = s3_buckets.get(self.bucket_name())
         if bucket_cred is None:
             return None
-        
+
         if "region" not in bucket_cred:
             return None
         else:
@@ -782,7 +822,7 @@ class S3IndexedFileLocation(IndexedFileLocation):
     def get_signed_url(
         self, action, expires_in, public_data=False, force_signed_url=True, **kwargs
     ):
-    
+
         aws_creds = get_value(
             config, "AWS_CREDENTIALS", InternalError("credentials not configured")
         )
@@ -946,7 +986,7 @@ class AzIndexedFileLocation(IndexedFileLocation):
                 using `flask.current_app`.
         """
 
-        
+
         boto = boto or flask.current_app.boto
         role_arn = get_value(
             bucket_cred, "role-arn", InternalError("role-arn of that bucket is missing")
@@ -1000,7 +1040,7 @@ class AzIndexedFileLocation(IndexedFileLocation):
         az_container = get_value(
             config, "AZ_CONTAINERS", InternalError("buckets not configured")
         )
-        
+
         if len(az_creds) == 0 and len(az_container) == 0:
             raise InternalError("no bucket is configured")
         if len(az_creds) == 0 and len(az_container) > 0:
@@ -1061,7 +1101,7 @@ class AzIndexedFileLocation(IndexedFileLocation):
         az_container = get_value(
             config, "AZ_CONTAINERS", InternalError("buckets not configured")
         )
-        
+
         bucket_name = self.bucket_name()
         bucket = az_container.get(bucket_name)
 
@@ -1077,7 +1117,7 @@ class AzIndexedFileLocation(IndexedFileLocation):
             bucket_name, az_creds, expires_in
         )
 
-        
+
         url = credential
         return url
 
@@ -1175,7 +1215,7 @@ class Azureuploadcontainer(IndexedFileLocation):
         az_containers = get_value(
             config, "AZ_CONTAINERS", InternalError("buckets not configured")
         )
-    
+
         return az_containers
 
 class GoogleStorageIndexedFileLocation(IndexedFileLocation):
@@ -1325,18 +1365,23 @@ class GoogleStorageIndexedFileLocation(IndexedFileLocation):
                 status_code = 500
             return ("Failed to delete data file.", status_code)
 
-def _get_user_info():
+
+def _get_user_info(sub_to_string=True):
     """
     Attempt to parse the request for token to authenticate the user. fallback to
     populated information about an anonymous user.
     """
     try:
         set_current_token(validate_request(aud={"user"}))
-        user_id = str(current_token["sub"])
+        user_id = current_token["sub"]
+        if sub_to_string:
+            user_id = str(user_id)
         username = current_token["context"]["user"]["name"]
     except JWTError:
         # this is fine b/c it might be public data, sign with anonymous username/id
-        user_id = ANONYMOUS_USER_ID
+        user_id = None
+        if sub_to_string:
+            user_id = ANONYMOUS_USER_ID
         username = ANONYMOUS_USERNAME
 
     return {"user_id": user_id, "username": username}
