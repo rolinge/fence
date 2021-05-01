@@ -107,12 +107,12 @@ def get_signed_url_for_file(action, file_id, file_name=None):
          )
 
 
-         if action == "download":  # for now only record download requests
-             create_presigned_url_audit_log(
-                 protocol=requested_protocol, indexed_file=indexed_file, action=action
-             )
+    if action == "download":  # for now only record download requests
+        create_presigned_url_audit_log(
+          protocol=requested_protocol, indexed_file=indexed_file, action=action
+        )
 
-        return {"url": signed_url}
+    return {"url": signed_url}
 
 def create_presigned_url_audit_log(indexed_file, action, protocol):
     user_info = _get_user_info(sub_to_string=False)
@@ -160,6 +160,7 @@ def make_azure_signed_url(az_connectionstring, az_container_name, file_name, fil
         print(f"Pre-signed URL:{az_signed_url}")
 
         return az_signed_url
+
 class BlankIndex(object):
     """
     A blank record in indexd, to use for the data upload flow.
