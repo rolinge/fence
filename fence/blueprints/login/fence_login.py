@@ -6,6 +6,7 @@ from fence.blueprints.login.base import DefaultOAuth2Login, DefaultOAuth2Callbac
 from fence.blueprints.login.redirect import validate_redirect
 from fence.config import config
 from fence.errors import Unauthorized
+from fence.jwt.errors import JWTError
 from fence.jwt.validate import validate_jwt
 from fence.models import IdentityProvider
 
@@ -91,15 +92,35 @@ class FenceCallback(DefaultOAuth2Callback):
         tokens = flask.current_app.fence_client.fetch_access_token(
             redirect_uri, **flask.request.args.to_dict()
         )
-        id_token_claims = validate_jwt(
-            tokens["id_token"], aud={"openid"}, purpose="id", attempt_refresh=True
-        )
+
+        try:
+            # For multi-Fence setup with two Fences >=5.0.0
+            id_token_claims = validate_jwt(
+                tokens["id_token"],
+                aud=self.client.client_id,
+                scope={"openid"},
+                purpose="id",
+                attempt_refresh=True,
+            )
+        except JWTError:
+            # Since fenceshib cannot be updated to issue "new-style" ID tokens
+            # (where scopes are in the scope claim and aud is in the aud claim),
+            # allow also "old-style" Fence ID tokens.
+            id_token_claims = validate_jwt(
+                tokens["id_token"],
+                aud="openid",
+                scope=None,
+                purpose="id",
+                attempt_refresh=True,
+            )
         username = id_token_claims["context"]["user"]["name"]
+        email = id_token_claims["context"]["user"].get("email")
         login_user(
             username,
             IdentityProvider.fence,
             fence_idp=flask.session.get("fence_idp"),
             shib_idp=flask.session.get("shib_idp"),
+            email=email,
         )
         self.post_login()
 
